@@ -1,11 +1,11 @@
 import { defineConfig } from 'vite'
 
 export default defineConfig({
-  root: 'src',
+  root: 'slides',
   server: {
     port: 5173,
-    host: true,
-    open: true,
+    host: '0.0.0.0',
+    strictPort: false,
     fs: {
       allow: ['..']
     }
@@ -13,6 +13,5 @@ export default defineConfig({
   build: {
     outDir: '../dist',
     assetsDir: 'assets'
-  },
-  publicDir: false
+  }
 })
