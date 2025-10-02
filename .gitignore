@@ -137,3 +137,16 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# PDF exports
+pdf-exports/
+*.pdf
+
+# Content directories (user-added)
+slides/*/
+!slides/css/
+!slides/index.html
+
+# Temporary files
+.DS_Store
+Thumbs.db

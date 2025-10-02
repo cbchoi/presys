@@ -1,0 +1,27 @@
+{
+  "name": "presys",
+  "version": "3.0.0",
+  "description": "Reveal.js-based Universal Presentation Management System",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --config config/vite.config.ts",
+    "build": "vite build --config config/vite.config.ts",
+    "preview": "vite preview --config config/vite.config.ts",
+    "export-pdf": "node tools/export-pdf.mjs",
+    "server": "node tools/server.js",
+    "start": "npm run build && npm run server",
+    "bootstrap": "python3 tools/bootstrap.py"
+  },
+  "dependencies": {
+    "reveal.js": "^5.2.1",
+    "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "vite": "^7.1.7",
+    "puppeteer": "^24.23.0",
+    "commander": "^14.0.1"
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  }
+}
