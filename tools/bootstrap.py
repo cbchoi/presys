@@ -135,19 +135,43 @@ def scan_modules(topic_path: Path) -> List[Dict[str, Any]]:
         if not item.is_dir() or item.name in ignore_dirs or item.name.startswith('.'):
             continue
 
-        # Check if this directory contains slides
+        # Check if this directory contains slides.md or slides.json
         slides_file = item / 'slides.md'
-        if slides_file.exists():
+        slides_json = item / 'slides.json'
+
+        if slides_file.exists() or slides_json.exists():
             module_info = {
                 'id': item.name,
+                'path': item.name,
                 'title': format_title(item.name),
-                'slide_count': count_slides(slides_file)
+                'slide_count': 0
             }
 
-            # Try to extract title from module's slides.md
-            title = extract_title_from_markdown(slides_file)
-            if title:
-                module_info['title'] = title
+            # Count slides from slides.md or slides.json
+            if slides_json.exists():
+                # Count slides from all files in slides.json
+                try:
+                    with open(slides_json, 'r', encoding='utf-8') as f:
+                        slides_config = json.load(f)
+                        files = slides_config.get('files', [])
+                        for slide_file in files:
+                            slide_file_path = item / slide_file
+                            if slide_file_path.exists():
+                                module_info['slide_count'] += count_slides(slide_file_path)
+                                # Try to extract title from first file
+                                if not module_info.get('title_extracted'):
+                                    title = extract_title_from_markdown(slide_file_path)
+                                    if title:
+                                        module_info['title'] = title
+                                        module_info['title_extracted'] = True
+                except Exception as e:
+                    print(f"⚠️  Warning: Could not read {slides_json}: {e}")
+            elif slides_file.exists():
+                module_info['slide_count'] = count_slides(slides_file)
+                # Try to extract title from module's slides.md
+                title = extract_title_from_markdown(slides_file)
+                if title:
+                    module_info['title'] = title
 
             modules.append(module_info)
 
@@ -223,10 +247,11 @@ def extract_summary_info(summary_file: Path) -> Dict[str, Any]:
             info['title'] = title_match.group(1).strip()
 
         # Extract description from various possible sections
-        # Try 학습 목표, 주요 내용, Overview, Description
+        # Try 과목 개요, 학습 목표, 주요 내용, Overview, Description
         desc_patterns = [
+            r'## (?:🎯 )?과목 개요\s*\n(.+?)(?=\n##|\Z)',
             r'## (?:🎯 )?학습 목표\s*\n(.+?)(?=\n##|\Z)',
-            r'## (?:📋 )?주요 내용\s*\n(.+?)(?=\n##|\Z)',
+            r'## (?:📚 )?주요 내용\s*\n(.+?)(?=\n##|\Z)',
             r'## (?:📝 )?Description\s*\n(.+?)(?=\n##|\Z)',
             r'## (?:🔍 )?Overview\s*\n(.+?)(?=\n##|\Z)',
         ]
@@ -294,13 +319,13 @@ def generate_index_html(topics: List[Dict[str, Any]]) -> str:
 
             status_html = '\n                    '.join(status_indicators) if status_indicators else '<span class="status-indicator">📋 Draft</span>'
 
-            # Generate module badges if modules exist
+            # Generate module count badge if modules exist
             modules_html = ''
             if topic['modules']:
-                module_badges = [f'<span class="module-badge">{m["title"]}</span>' for m in topic['modules']]
                 modules_html = f'''
-                <div class="modules">
-                    <strong>Modules:</strong> {' '.join(module_badges)}
+                <div class="modules-info" style="margin: 15px 0; padding: 10px; background: #f0f4ff; border-radius: 8px; border-left: 4px solid #667eea;">
+                    <strong style="color: #667eea;">📦 {len(topic['modules'])} Modules</strong>
+                    <span style="color: #718096; margin-left: 10px;">• Click "View Slides" to explore</span>
                 </div>'''
 
             card_html = f'''
@@ -316,7 +341,7 @@ def generate_index_html(topics: List[Dict[str, Any]]) -> str:
                     {status_html}
                 </div>
                 <div class="actions">
-                    <a href="?topic={topic['path']}" class="view-link">🎯 View Slides</a>
+                    <a href="/{topic['path']}/modules.html" class="view-link">🎯 View Slides</a>
                     <button onclick="generatePDF('{topic['path']}')" class="pdf-button">📄 Export PDF</button>
                 </div>
             </div>'''
@@ -621,6 +646,384 @@ def generate_index_html(topics: List[Dict[str, Any]]) -> str:
     return html_content
 
 
+def generate_module_selector_page(topic: Dict[str, Any], slides_dir: Path) -> str:
+    """
+    Generate module selector page for a topic
+
+    Args:
+        topic: Topic dictionary with metadata
+        slides_dir: Path to slides directory
+
+    Returns:
+        HTML content for module selector page
+    """
+    modules_html = ""
+
+    if topic.get('modules'):
+        for idx, module in enumerate(topic['modules'], 1):
+            module_html = f'''
+            <div class="module-card">
+                <div class="module-number">{idx}</div>
+                <div class="module-content">
+                    <h3>{module['title']}</h3>
+                    <div class="module-meta">
+                        <span>📄 {module['slide_count']} slides</span>
+                    </div>
+                </div>
+                <a href="/{topic['path']}/{module['path']}/slides.html" class="module-link">
+                    Start Module →
+                </a>
+            </div>'''
+            modules_html += module_html
+
+    html_content = f'''<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{topic['title']} - Module Selector</title>
+
+    <style>
+        * {{
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }}
+
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans KR', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }}
+
+        .container {{
+            max-width: 1200px;
+            margin: 0 auto;
+        }}
+
+        .header {{
+            text-align: center;
+            color: white;
+            padding: 40px 20px;
+            margin-bottom: 40px;
+        }}
+
+        .header h1 {{
+            font-size: 2.5em;
+            margin-bottom: 15px;
+            font-weight: 700;
+        }}
+
+        .header p {{
+            font-size: 1.1em;
+            opacity: 0.9;
+        }}
+
+        .back-link {{
+            display: inline-block;
+            color: white;
+            text-decoration: none;
+            margin-bottom: 20px;
+            padding: 10px 20px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }}
+
+        .back-link:hover {{
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateX(-5px);
+        }}
+
+        .modules-grid {{
+            display: grid;
+            gap: 20px;
+            margin-bottom: 40px;
+        }}
+
+        .module-card {{
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+        }}
+
+        .module-card:hover {{
+            transform: translateY(-3px);
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.15);
+        }}
+
+        .module-number {{
+            font-size: 2em;
+            font-weight: 700;
+            color: #667eea;
+            min-width: 60px;
+            text-align: center;
+        }}
+
+        .module-content {{
+            flex: 1;
+        }}
+
+        .module-content h3 {{
+            font-size: 1.3em;
+            color: #2d3748;
+            margin-bottom: 8px;
+        }}
+
+        .module-meta {{
+            color: #718096;
+            font-size: 0.9em;
+        }}
+
+        .module-link {{
+            padding: 12px 24px;
+            background: #667eea;
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            white-space: nowrap;
+        }}
+
+        .module-link:hover {{
+            background: #5568d3;
+            transform: scale(1.05);
+        }}
+
+        @media (max-width: 768px) {{
+            .module-card {{
+                flex-direction: column;
+                text-align: center;
+            }}
+
+            .module-number {{
+                min-width: auto;
+            }}
+        }}
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <a href="/index.html" class="back-link">⌂ Home</a>
+
+        <div class="header">
+            <h1>📚 {topic['title']}</h1>
+            <p>{topic['description']}</p>
+        </div>
+
+        <div class="modules-grid">
+            {modules_html}
+        </div>
+    </div>
+</body>
+</html>'''
+
+    return html_content
+
+
+def generate_module_slides_html(topic: Dict[str, Any], module: Dict[str, Any], slides_dir: Path) -> str:
+    """
+    Generate Reveal.js slides HTML for a module
+
+    Args:
+        topic: Topic dictionary with metadata
+        module: Module dictionary with metadata
+        slides_dir: Path to slides directory
+
+    Returns:
+        HTML content for module slides
+    """
+    # Check if slides.json exists
+    module_path = slides_dir / topic['path'] / module['path']
+    slides_json_path = module_path / 'slides.json'
+
+    slides_sections = ''
+    if slides_json_path.exists():
+        # Read slides.json and generate sections for each file
+        try:
+            with open(slides_json_path, 'r', encoding='utf-8') as f:
+                slides_config = json.load(f)
+                files = slides_config.get('files', [])
+
+                for slide_file in files:
+                    slides_sections += f'''
+            <section data-markdown="{slide_file}"
+                     data-separator="^\\n---\\n$"
+                     data-separator-vertical="^\\n--\\n$"
+                     data-separator-notes="^Note:"
+                     data-charset="utf-8">
+            </section>'''
+        except Exception as e:
+            print(f"⚠️  Warning: Could not read {slides_json_path}: {e}")
+            # Fallback to slides.md
+            slides_sections = '''
+            <section data-markdown="slides.md"
+                     data-separator="^\\n---\\n$"
+                     data-separator-vertical="^\\n--\\n$"
+                     data-separator-notes="^Note:"
+                     data-charset="utf-8">
+            </section>'''
+    else:
+        # Fallback to slides.md
+        slides_sections = '''
+            <section data-markdown="slides.md"
+                     data-separator="^\\n---\\n$"
+                     data-separator-vertical="^\\n--\\n$"
+                     data-separator-notes="^Note:"
+                     data-charset="utf-8">
+            </section>'''
+    html_content = f'''<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+    <title>{module['title']} - {topic['title']}</title>
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.2.1/dist/reveal.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.2.1/dist/theme/white.css" id="theme">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.2.1/plugin/highlight/monokai.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js-plugins@latest/chalkboard/style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js-plugins@latest/customcontrols/style.css">
+    <link rel="stylesheet" href="/css/custom_theme.css">
+</head>
+
+<body class="theme-custom">
+    <!-- Navigation buttons -->
+    <div style="position: fixed; top: 10px; left: 10px; z-index: 100;">
+        <a href="/{topic['path']}/modules.html"
+           style="display: inline-block; padding: 8px 16px; background: rgba(42, 85, 153, 0.9); color: white;
+                  text-decoration: none; border-radius: 5px; font-size: 14px; font-weight: 600;
+                  box-shadow: 0 2px 8px rgba(0,0,0,0.2); transition: all 0.3s ease;">
+            ← Modules
+        </a>
+        <a href="/index.html"
+           style="display: inline-block; padding: 8px 16px; background: rgba(100, 100, 100, 0.9); color: white;
+                  text-decoration: none; border-radius: 5px; font-size: 14px; font-weight: 600;
+                  box-shadow: 0 2px 8px rgba(0,0,0,0.2); margin-left: 5px; transition: all 0.3s ease;">
+            ⌂ Home
+        </a>
+    </div>
+
+    <div class="reveal">
+        <div class="slides">{slides_sections}
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.2.1/dist/reveal.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.2.1/plugin/markdown/markdown.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.2.1/plugin/highlight/highlight.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.2.1/plugin/notes/notes.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.2.1/plugin/zoom/zoom.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/reveal.js-plugins@latest/chalkboard/plugin.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/reveal.js-plugins@latest/customcontrols/plugin.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/reveal.js-mermaid-plugin@2.0.0/plugin/mermaid/mermaid.js"></script>
+
+    <script>
+        Reveal.initialize({{
+            hash: true,
+            center: false,
+            slideNumber: 'c/t',
+            showSlideNumber: 'all',
+            transition: 'slide',
+            width: 1280,
+            height: 720,
+            margin: 0.04,
+
+            plugins: [
+                RevealMarkdown,
+                RevealHighlight,
+                RevealNotes,
+                RevealZoom,
+                RevealChalkboard,
+                RevealCustomControls,
+                RevealMermaid
+            ],
+
+            // Chalkboard plugin configuration
+            chalkboard: {{
+                boardmarkerWidth: 3,
+                chalkWidth: 4,
+                chalkEffect: 0.5,
+                storage: null,
+                src: null,
+                readOnly: false,
+                toggleChalkboardButton: {{ left: '30px', bottom: '30px', top: 'auto', right: 'auto' }},
+                toggleNotesButton: {{ left: '80px', bottom: '30px', top: 'auto', right: 'auto' }},
+                colorButtons: true,
+                boardHandle: true,
+                transition: 800,
+                theme: 'whiteboard'
+            }},
+
+            // Custom controls configuration
+            customcontrols: {{
+                controls: [
+                    {{
+                        icon: '<i class="fa fa-pen-square"></i>',
+                        title: 'Toggle chalkboard (B)',
+                        action: 'RevealChalkboard.toggleChalkboard();'
+                    }},
+                    {{
+                        icon: '<i class="fa fa-pen"></i>',
+                        title: 'Toggle notes canvas (C)',
+                        action: 'RevealChalkboard.toggleNotesCanvas();'
+                    }}
+                ]
+            }},
+
+            markdown: {{
+                smartypants: true
+            }},
+
+            keyboard: {{
+                // Home key - go to modules selector
+                36: function() {{
+                    window.location.href = '/{topic['path']}/modules.html';
+                }},
+                // Backspace - go back to modules selector (disabled when chalkboard is active)
+                8: function() {{
+                    if (!document.querySelector('.reveal').classList.contains('has-chalkboard')) {{
+                        window.location.href = '/{topic['path']}/modules.html';
+                    }}
+                }},
+                // B key - toggle chalkboard
+                66: function() {{
+                    RevealChalkboard.toggleChalkboard();
+                }},
+                // C key - toggle notes canvas
+                67: function() {{
+                    RevealChalkboard.toggleNotesCanvas();
+                }},
+                // D key - download drawings
+                68: function() {{
+                    RevealChalkboard.download();
+                }},
+                // DELETE key - clear canvas
+                46: function() {{
+                    RevealChalkboard.clear();
+                }}
+            }}
+        }});
+    </script>
+</body>
+</html>'''
+
+    return html_content
+
+
 def main():
     """Main function to generate index.html"""
 
@@ -671,6 +1074,43 @@ def main():
     except Exception as e:
         print(f"❌ Failed to write index.html: {e}")
         return
+
+    # Generate module selector pages for each topic
+    if topics:
+        print(f"\n🏗️  Generating module selector pages...")
+        for topic in topics:
+            if topic.get('modules'):
+                module_page_content = generate_module_selector_page(topic, slides_dir)
+                topic_dir = slides_dir / topic['path']
+                module_page_path = topic_dir / "modules.html"
+
+                try:
+                    with open(module_page_path, 'w', encoding='utf-8') as f:
+                        f.write(module_page_content)
+                    print(f"   ✅ {topic['title']}: {module_page_path.name}")
+                except Exception as e:
+                    print(f"   ❌ Failed to write {module_page_path.name}: {e}")
+
+    # Generate slides.html for each module
+    if topics:
+        print(f"\n🏗️  Generating slides.html for modules...")
+        total_generated = 0
+        for topic in topics:
+            if topic.get('modules'):
+                for module in topic['modules']:
+                    slides_html_content = generate_module_slides_html(topic, module, slides_dir)
+                    module_dir = slides_dir / topic['path'] / module['path']
+                    slides_html_path = module_dir / "slides.html"
+
+                    try:
+                        with open(slides_html_path, 'w', encoding='utf-8') as f:
+                            f.write(slides_html_content)
+                        total_generated += 1
+                    except Exception as e:
+                        print(f"   ❌ Failed to write {slides_html_path}: {e}")
+
+        if total_generated > 0:
+            print(f"   ✅ Generated {total_generated} slides.html files")
 
     # Generate summary report
     if topics:
