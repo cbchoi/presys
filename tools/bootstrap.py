@@ -897,6 +897,13 @@ def generate_module_slides_html(topic: Dict[str, Any], module: Dict[str, Any], s
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js-plugins@latest/chalkboard/style.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js-plugins@latest/customcontrols/style.css">
     <link rel="stylesheet" href="/css/custom_theme.css">
+
+    <style>
+        /* Mermaid 노드 레이블 수직 중앙 정렬 */
+        .flowchart-label text {{
+            dominant-baseline: middle !important;
+        }}
+    </style>
 </head>
 
 <body class="theme-custom">
@@ -926,6 +933,7 @@ def generate_module_slides_html(topic: Dict[str, Any], module: Dict[str, Any], s
     <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.2.1/plugin/highlight/highlight.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.2.1/plugin/notes/notes.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.2.1/plugin/zoom/zoom.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.2.1/plugin/math/math.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/reveal.js-plugins@latest/chalkboard/plugin.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/reveal.js-plugins@latest/customcontrols/plugin.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
@@ -947,6 +955,7 @@ def generate_module_slides_html(topic: Dict[str, Any], module: Dict[str, Any], s
                 RevealHighlight,
                 RevealNotes,
                 RevealZoom,
+                RevealMath.KaTeX,
                 RevealChalkboard,
                 RevealCustomControls,
                 RevealMermaid
